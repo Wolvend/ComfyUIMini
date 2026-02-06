@@ -31,7 +31,7 @@ export class WorkflowInstance {
             }
 
             for (const [inputName, inputValue] of Object.entries(nodeInputs)) {
-                if (!filledWorkflow[nodeId].inputs[inputName]) {
+                if (!(inputName in filledWorkflow[nodeId].inputs)) {
                     console.warn(`Input ${inputName} not found in node ${nodeId}`);
                     continue;
                 }

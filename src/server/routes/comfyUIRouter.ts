@@ -1,25 +1,35 @@
 import express from 'express';
 import multer from 'multer';
+import cookieParser from 'cookie-parser';
 import { getHistory, getQueue, interruptGeneration, getImage, uploadImage } from '../utils/comfyAPIUtils';
 import { getProcessedObjectInfo } from '../utils/objectInfoUtils';
+import requireAuth from '../middleware/authMiddleware';
 
 const upload = multer();
 
 const router = express.Router();
 
+router.use(cookieParser());
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
+
+// If an access token is configured, protect all ComfyUI proxy endpoints.
+router.use(requireAuth);
 
 router.get('/history/:promptId', async (req, res) => {
     const promptId = req.params.promptId;
 
     if (!promptId) {
-        res.send('Prompt id cannot be undefined').status(400);
+        res.status(400).send('Prompt id cannot be undefined');
+        return;
     }
 
-    const promptHistory = getHistory(promptId);
-
-    res.json(promptHistory);
+    try {
+        const promptHistory = await getHistory(promptId);
+        res.json(promptHistory);
+    } catch (error) {
+        res.status(502).json({ error: 'Failed to fetch history from ComfyUI.', details: String(error) });
+    }
 });
 
 router.get('/image', async (req, res): Promise<void> => {
@@ -31,6 +41,11 @@ router.get('/image', async (req, res): Promise<void> => {
 
     if (!filename || !imageType) {
         res.status(400).send('Missing parameters');
+        return;
+    }
+
+    if (!['input', 'output', 'temp'].includes(imageType)) {
+        res.status(400).send('Invalid image type');
         return;
     }
 
@@ -53,15 +68,21 @@ router.get('/image', async (req, res): Promise<void> => {
 });
 
 router.get('/queue', async (req, res) => {
-    const queue = getQueue();
-
-    res.json(queue);
+    try {
+        const queue = await getQueue();
+        res.json(queue);
+    } catch (error) {
+        res.status(502).json({ error: 'Failed to fetch queue from ComfyUI.', details: String(error) });
+    }
 });
 
 router.get('/interrupt', async (req, res) => {
-    const interruptionResponse = await interruptGeneration();
-
-    res.send(interruptionResponse.data);
+    try {
+        const interruptionResponse = await interruptGeneration();
+        res.json(interruptionResponse);
+    } catch (error) {
+        res.status(502).json({ error: 'Failed to interrupt generation in ComfyUI.', details: String(error) });
+    }
 });
 
 router.get('/inputsinfo', async (req, res) => {

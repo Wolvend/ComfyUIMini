@@ -3,6 +3,7 @@ import fs from 'fs';
 import config from 'config';
 import logger from './logger';
 import paths from './paths';
+import { safeJoin } from './safePath';
 import { Workflow, WorkflowFileReadError, WorkflowWithMetadata } from '@shared/types/Workflow';
 import { WorkflowInstance } from '@shared/classes/Workflow';
 
@@ -33,7 +34,7 @@ function checkForWorkflowsFolder() {
         logger.warn(`Server workflows folder path from config not found, attempting to create...`);
 
         try {
-            fs.mkdirSync(paths.workflows);
+            fs.mkdirSync(paths.workflows, { recursive: true });
             logger.success(`Server workflows folder created at '${paths.workflows}'`);
         } catch (err) {
             console.error(`Error creating server workflows directory: ${err}`);
@@ -63,16 +64,19 @@ function getWorkflowFolderJsonFiles(): string[] {
  * @param {object} workflowJson The workflow object.
  * @returns {boolean} True if workflow is a valid ComfyUI workflow, otherwise false.
  */
-function checkIfObjectIsValidWorkflow(workflowJson: { [key: string]: any }): boolean {
-    if (typeof workflowJson !== 'object') {
+function checkIfObjectIsValidWorkflow(workflowJson: Record<string, unknown>): boolean {
+    if (!workflowJson || typeof workflowJson !== 'object') {
         return false;
     }
 
     for (const key of Object.keys(workflowJson)) {
         const node = workflowJson[key];
 
-        if (node && typeof node === 'object' && 'inputs' in node && typeof node.inputs === 'object') {
-            return true;
+        if (node && typeof node === 'object' && 'inputs' in node) {
+            const inputs = (node as { inputs?: unknown }).inputs;
+            if (inputs && typeof inputs === 'object') {
+                return true;
+            }
         }
     }
 
@@ -89,8 +93,14 @@ function getServerWorkflowMetadata(jsonFileList: string[]): ServerWorkflowMetada
     const accumulatedWorkflowMetadata: ServerWorkflowMetadataList = {};
 
     for (const jsonFilename of jsonFileList) {
-        const jsonFileContents = fs.readFileSync(path.join(paths.workflows, jsonFilename), 'utf8');
-        const parsedJsonContents = JSON.parse(jsonFileContents);
+        let parsedJsonContents: Workflow;
+        try {
+            const jsonFileContents = fs.readFileSync(path.join(paths.workflows, jsonFilename), 'utf8');
+            parsedJsonContents = JSON.parse(jsonFileContents);
+        } catch (error) {
+            logger.warn(`Skipping invalid workflow JSON '${jsonFilename}': ${error}`);
+            continue;
+        }
 
         if (!checkIfObjectIsValidWorkflow(parsedJsonContents)) {
             continue;
@@ -185,8 +195,12 @@ function writeConvertedWorkflowToFile(workflowObject: object, originalWorkflowFi
  * @returns {Record<string, object>|WorkflowFileReadError} The workflow object, or an object with an error type if there was an error.
  */
 function readServerWorkflow(filename: string): WorkflowWithMetadata | WorkflowFileReadError {
+    if (path.extname(filename).toLowerCase() !== '.json') {
+        return { error: 'notFound' };
+    }
+
     try {
-        const workflowFilePath = path.join(paths.workflows, filename);
+        const workflowFilePath = safeJoin(paths.workflows, filename);
         const fileContents = fs.readFileSync(workflowFilePath);
         const workflowObject = JSON.parse(fileContents.toString());
 
@@ -196,6 +210,10 @@ function readServerWorkflow(filename: string): WorkflowWithMetadata | WorkflowFi
             console.error('Error when reading workflow from file:', error);
             return { error: 'invalidJson' };
         } else if (error instanceof Error) {
+            if (error.message === 'Invalid path') {
+                return { error: 'notFound' };
+            }
+
             if ('code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
                 return { error: 'notFound' };
             }
@@ -217,8 +235,13 @@ function readServerWorkflow(filename: string): WorkflowWithMetadata | WorkflowFi
  * @returns {boolean} Whether or not the workflow was successfully saved.
  */
 function writeServerWorkflow(filename: string, workflowObject: object): boolean {
+    if (path.extname(filename).toLowerCase() !== '.json') {
+        return false;
+    }
+
     try {
-        fs.writeFileSync(path.join(paths.workflows, filename), JSON.stringify(workflowObject, null, 2), 'utf8');
+        const workflowFilePath = safeJoin(paths.workflows, filename);
+        fs.writeFileSync(workflowFilePath, JSON.stringify(workflowObject, null, 2), 'utf8');
         return true;
     } catch (error) {
         console.error('Error when saving workflow to file:', error);
@@ -227,8 +250,13 @@ function writeServerWorkflow(filename: string, workflowObject: object): boolean 
 }
 
 function deleteServerWorkflow(filename: string): boolean {
+    if (path.extname(filename).toLowerCase() !== '.json') {
+        return false;
+    }
+
     try {
-        fs.unlinkSync(path.join(paths.workflows, filename));
+        const workflowFilePath = safeJoin(paths.workflows, filename);
+        fs.unlinkSync(workflowFilePath);
         return true;
     } catch (error) {
         console.error('Error when deleting workflow from file:', error);

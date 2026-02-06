@@ -2,10 +2,10 @@ export interface ObjectInfoPartial {
     [nodeType: string]: {
         input: {
             required?: {
-                [inputName: string]: any;
+                [inputName: string]: unknown;
             };
             optional?: {
-                [inputName: string]: any;
+                [inputName: string]: unknown;
             };
         };
     };

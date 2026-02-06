@@ -27,7 +27,15 @@ h2 {
 }
 
 .option-label-container .option-help-button {
-    font-size: 1.5rem;
+    width: 1.5rem;
+    height: 1.5rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    line-height: 1;
+    border: 1px solid var(--text-primary-color);
+    border-radius: 999px;
     cursor: pointer;
     user-select: none;
     margin-left: 0.5rem;
@@ -47,4 +55,25 @@ h2 {
 
 #set-gallery-items-per-page {
     margin-top: 1rem;
+}
+
+.auth-row {
+    display: flex;
+    flex-direction: row;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+#auth-token-input {
+    flex: 1;
+    min-width: 12rem;
+}
+
+#auth-logout-button {
+    display: none;
+}
+
+.auth-status {
+    margin-top: 0.75rem;
+    opacity: 0.9;
 }

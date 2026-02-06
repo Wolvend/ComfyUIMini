@@ -42,39 +42,62 @@ async function getProcessedObjectInfo(): Promise<ProcessedObjectInfo | null> {
  * However, arrays may also *sometimes* have a second element with other options such as `tooltip`, `default`, or `image_upload`
  * that determines if the input has an upload input or is just a list of options.
  *
- * @param {any} inputInfo
+ * @param {unknown[]} inputInfo
  * @returns {NormalisedComfyInputInfo}
  */
-function getNormalisedInfo(inputInfo: any): NormalisedComfyInputInfo {
+function getNormalisedInfo(inputInfo: unknown[]): NormalisedComfyInputInfo {
     const normalisedInfo: Partial<NormalisedComfyInputInfo> = {
         userAccessible: false,
     };
 
-    if (Array.isArray(inputInfo[0])) {
+    const first = inputInfo[0];
+
+    if (Array.isArray(first)) {
         normalisedInfo.userAccessible = true;
         normalisedInfo.type = 'ARRAY';
-        normalisedInfo.list = inputInfo[0];
+        normalisedInfo.list = first.map((v) => String(v));
 
-        if (inputInfo[1]) {
-            normalisedInfo.default = inputInfo[1]?.default;
-            normalisedInfo.imageUpload = inputInfo[1]?.image_upload;
-            normalisedInfo.tooltip = inputInfo[1]?.tooltip;
+        const options = inputInfo[1];
+        if (options && typeof options === 'object') {
+            const opts = options as Record<string, unknown>;
+
+            if (opts.default !== undefined && opts.default !== null) {
+                normalisedInfo.default = String(opts.default);
+            }
+
+            normalisedInfo.imageUpload = Boolean(opts.image_upload);
+
+            if (opts.tooltip !== undefined && opts.tooltip !== null) {
+                normalisedInfo.tooltip = String(opts.tooltip);
+            }
         }
 
         return normalisedInfo as NormalisedComfyInputInfo;
     }
 
-    if (['INT', 'FLOAT', 'STRING'].includes(inputInfo[0])) {
+    if (typeof first === 'string' && ['INT', 'FLOAT', 'STRING'].includes(first)) {
         // data can contain default, tooltip for any type, min, max for int, and min max, and step for ints, and multiline, dynamicPrompts for strings
         normalisedInfo.userAccessible = true;
-        normalisedInfo.type = inputInfo[0];
-        normalisedInfo.default = inputInfo[1]?.default;
-        normalisedInfo.tooltip = inputInfo[1]?.tooltip;
-        normalisedInfo.min = inputInfo[1]?.min;
-        normalisedInfo.max = inputInfo[1]?.max;
-        normalisedInfo.step = inputInfo[1]?.step;
-        normalisedInfo.multiline = inputInfo[1]?.multiline;
-        normalisedInfo.dynamicPrompts = inputInfo[1]?.dynamicPrompts;
+        normalisedInfo.type = first as 'INT' | 'FLOAT' | 'STRING';
+
+        const options = inputInfo[1];
+        if (options && typeof options === 'object') {
+            const opts = options as Record<string, unknown>;
+
+            if (opts.default !== undefined && opts.default !== null) {
+                normalisedInfo.default = String(opts.default);
+            }
+
+            if (opts.tooltip !== undefined && opts.tooltip !== null) {
+                normalisedInfo.tooltip = String(opts.tooltip);
+            }
+
+            normalisedInfo.min = typeof opts.min === 'number' ? opts.min : undefined;
+            normalisedInfo.max = typeof opts.max === 'number' ? opts.max : undefined;
+            normalisedInfo.step = typeof opts.step === 'number' ? opts.step : undefined;
+            normalisedInfo.multiline = typeof opts.multiline === 'boolean' ? opts.multiline : undefined;
+            normalisedInfo.dynamicPrompts = typeof opts.dynamicPrompts === 'boolean' ? opts.dynamicPrompts : undefined;
+        }
 
         return normalisedInfo as NormalisedComfyInputInfo;
     }

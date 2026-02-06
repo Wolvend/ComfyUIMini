@@ -5,4 +5,5 @@ workflows/*
 !/workflows/default_comfyui_workflow.json
 
 /config/default.json
+/config/local.json
 dist/

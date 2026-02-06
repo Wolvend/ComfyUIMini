@@ -1,6 +1,7 @@
 import path from 'path';
 import fs from 'fs';
 import config from 'config';
+import { safeJoin } from './safePath';
 
 function getRelativeTimeText(timestamp: number): string {
     const now = Date.now();
@@ -16,10 +17,6 @@ function getRelativeTimeText(timestamp: number): string {
     if (secondsPast < 86400) {
         const hoursAgo = Math.floor(secondsPast / 3600);
         return `${hoursAgo} hours(s) ago`;
-    }
-    if (secondsPast < 604800) {
-        const daysAgo = Math.floor(secondsPast / 86400);
-        return `${daysAgo} days(s) ago`;
     }
     if (secondsPast < 604800) {
         const daysAgo = Math.floor(secondsPast / 86400);
@@ -84,7 +81,16 @@ function getGalleryPageData(page = 0, subfolder = '', itemsPerPage = 20) {
         };
     }
 
-    const targetPath = path.join(imageOutputPath, subfolder);
+    let targetPath: string;
+    try {
+        targetPath = safeJoin(imageOutputPath, subfolder);
+    } catch {
+        return {
+            error: 'Invalid subfolder path.',
+            scanned: { subfolders: [], images: [] },
+            pageInfo: { prevPage: 0, currentPage: 0, nextPage: 0, totalPages: 0 },
+        };
+    }
 
     if (!fs.existsSync(targetPath)) {
         return {
@@ -107,9 +113,10 @@ function getGalleryPageData(page = 0, subfolder = '', itemsPerPage = 20) {
         })
         .map((file) => {
             const mtime = fs.statSync(path.join(targetPath, file)).mtime.getTime();
+            const qs = new URLSearchParams({ filename: file, subfolder: subfolder, type: 'output' });
 
             return {
-                path: `/comfyui/image?filename=${file}&subfolder=${subfolder}&type=output`,
+                path: `/comfyui/image?${qs.toString()}`,
                 time: mtime,
                 timeText: getRelativeTimeText(mtime),
             };
@@ -131,7 +138,7 @@ function getGalleryPageData(page = 0, subfolder = '', itemsPerPage = 20) {
         subfolders = [];
     }
 
-    const totalPages = Math.floor(filteredFiles.length / itemsPerPage) - 1;
+    const totalPages = Math.max(0, Math.ceil(filteredFiles.length / itemsPerPage) - 1);
     const prevPage = page - 1 >= 0 ? page - 1 : 0;
     const nextPage = page + 1 <= totalPages ? page + 1 : totalPages;
 

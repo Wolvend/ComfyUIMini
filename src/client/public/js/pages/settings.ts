@@ -8,6 +8,10 @@ const clearSavedInputValuesButton = document.getElementById('clear-saved-input-v
 const compensatePreviewSaturationCheckbox = document.getElementById(
     'compensate-preview-saturation'
 ) as HTMLInputElement;
+const authTokenInput = document.getElementById('auth-token-input') as HTMLInputElement | null;
+const authLoginButton = document.getElementById('auth-login-button') as HTMLButtonElement | null;
+const authLogoutButton = document.getElementById('auth-logout-button') as HTMLButtonElement | null;
+const authStatusElem = document.getElementById('auth-status') as HTMLElement | null;
 
 const allTooltipElems = document.querySelectorAll('[data-tooltip]');
 
@@ -70,6 +74,116 @@ compensatePreviewSaturationCheckbox.addEventListener('change', () => {
     setConfig('workflow.compensatePreviewSaturation', checked);
 });
 
+async function refreshAuthStatus() {
+    if (!authStatusElem || !authTokenInput || !authLoginButton || !authLogoutButton) {
+        return;
+    }
+
+    authStatusElem.textContent = 'Checking authentication status...';
+
+    try {
+        const response = await fetch('/setsetting/auth');
+        const responseJson = await response.json();
+
+        if (!response.ok) {
+            authStatusElem.textContent = 'Failed to fetch authentication status.';
+            return;
+        }
+
+        const enabled = Boolean(responseJson.enabled);
+        const authenticated = Boolean(responseJson.authenticated);
+
+        if (!enabled) {
+            authStatusElem.textContent = 'Access token is disabled on the server.';
+            authTokenInput.disabled = true;
+            authLoginButton.disabled = true;
+            authLogoutButton.disabled = true;
+            authLogoutButton.style.display = 'none';
+            authLoginButton.style.display = 'inline-block';
+            return;
+        }
+
+        if (authenticated) {
+            authStatusElem.textContent = 'Authenticated.';
+            authTokenInput.value = '';
+            authTokenInput.disabled = true;
+            authLoginButton.style.display = 'none';
+            authLogoutButton.style.display = 'inline-block';
+            authLogoutButton.disabled = false;
+            return;
+        }
+
+        authStatusElem.textContent = 'Authentication required.';
+        authTokenInput.disabled = false;
+        authLoginButton.disabled = false;
+        authLoginButton.style.display = 'inline-block';
+        authLogoutButton.style.display = 'none';
+        authLogoutButton.disabled = false;
+    } catch (error) {
+        authStatusElem.textContent = 'Failed to fetch authentication status.';
+        console.error(error);
+    }
+}
+
+if (authLoginButton && authTokenInput) {
+    authLoginButton.addEventListener('click', async () => {
+        const token = authTokenInput.value.trim();
+
+        if (!token) {
+            openPopupWindow('Token is required.', PopupWindowType.ERROR);
+            return;
+        }
+
+        try {
+            const response = await fetch('/setsetting/auth', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ token }),
+            });
+
+            const responseJson = await response.json();
+
+            if (response.ok) {
+                openPopupWindow(responseJson.message || 'Authenticated.', PopupWindowType.INFO);
+                await refreshAuthStatus();
+            } else {
+                openPopupWindow(responseJson.error || 'Authentication failed.', PopupWindowType.ERROR);
+            }
+        } catch (error) {
+            openPopupWindow('An error occured while authenticating.', PopupWindowType.ERROR, error);
+        }
+    });
+
+    authTokenInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            authLoginButton.click();
+        }
+    });
+}
+
+if (authLogoutButton) {
+    authLogoutButton.addEventListener('click', async () => {
+        try {
+            const response = await fetch('/setsetting/auth', {
+                method: 'DELETE',
+            });
+
+            const responseJson = await response.json();
+
+            if (response.ok) {
+                openPopupWindow(responseJson.message || 'Logged out.', PopupWindowType.INFO);
+                await refreshAuthStatus();
+            } else {
+                openPopupWindow(responseJson.error || 'Failed to log out.', PopupWindowType.ERROR);
+            }
+        } catch (error) {
+            openPopupWindow('An error occured while logging out.', PopupWindowType.ERROR, error);
+        }
+    });
+}
+
 function loadConfigsIntoPage() {
     const saturationCompensationConfig = getConfig('workflow.compensatePreviewSaturation') as boolean;
 
@@ -79,3 +193,4 @@ function loadConfigsIntoPage() {
 }
 
 loadConfigsIntoPage();
+refreshAuthStatus();

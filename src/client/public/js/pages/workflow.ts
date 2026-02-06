@@ -461,33 +461,56 @@ export async function runWorkflow() {
 }
 
 // TODO: Setup type for message for both client and server
-function handleWebSocketMessage(event: MessageEvent<any>) {
-    const message = JSON.parse(event.data);
+type WsMessageEnvelope = {
+    type?: unknown;
+    data?: unknown;
+    message?: unknown;
+};
 
-    switch (message.type) {
+function handleWebSocketMessage(event: MessageEvent<string>) {
+    let message: WsMessageEnvelope;
+
+    try {
+        const parsed: unknown = JSON.parse(event.data);
+        if (!parsed || typeof parsed !== 'object') {
+            console.warn('Invalid WebSocket message payload:', parsed);
+            return;
+        }
+
+        message = parsed as WsMessageEnvelope;
+    } catch (error) {
+        console.warn('Failed to parse WebSocket message:', error);
+        return;
+    }
+
+    const type = typeof message.type === 'string' ? message.type : '';
+
+    switch (type) {
         case 'progress':
-            updateProgressBars(message.data);
+            updateProgressBars(message.data as ProgressMessage);
             break;
 
         case 'preview':
-            updateImagePreview(message.data);
+            updateImagePreview(message.data as PreviewMessage);
             break;
 
         case 'total_images':
-            setupImagePlaceholders(message.data);
+            setupImagePlaceholders(message.data as TotalImagesMessage);
             break;
 
         case 'completed':
-            finishGeneration(message.data);
+            finishGeneration(message.data as FinishGenerationMessage);
             break;
 
-        case 'error':
-            console.error('Error:', message.message);
-            openPopupWindow(message.message, PopupWindowType.ERROR);
+        case 'error': {
+            const errorMessage = typeof message.message === 'string' ? message.message : 'Unknown error';
+            console.error('Error:', errorMessage);
+            openPopupWindow(errorMessage, PopupWindowType.ERROR);
             break;
+        }
 
         default:
-            console.warn('Unknown WebSocket message type:', message.type);
+            console.warn('Unknown WebSocket message type:', type || message.type);
             console.log(message);
             break;
     }

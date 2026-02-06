@@ -1,6 +1,7 @@
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import themeMiddleware from '../middleware/themeMiddleware';
+import requireAuth from '../middleware/authMiddleware';
 import {
     writeServerWorkflow,
     readServerWorkflow,
@@ -46,7 +47,7 @@ router.get('/edit/:type/:identifier', (req: RequestWithTheme, res) => {
     loadAndRenderWorkflow(workflowType, workflowIdentifier, req, res, 'pages/edit');
 });
 
-router.put('/edit/:fileName', (req, res) => {
+router.put('/edit/:fileName', requireAuth, (req, res) => {
     const workflowFilename = req.params.fileName;
     const workflowJson = req.body;
 
@@ -59,7 +60,7 @@ router.put('/edit/:fileName', (req, res) => {
     }
 });
 
-router.delete('/edit/:fileName', (req, res) => {
+router.delete('/edit/:fileName', requireAuth, (req, res) => {
     const workflowFilename = req.params.fileName;
 
     const finishedSuccessfully = deleteServerWorkflow(workflowFilename);

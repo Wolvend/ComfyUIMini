@@ -36,6 +36,9 @@ serverWorkflowsCheck();
 
 server.on('upgrade', handleUpgrade);
 
-server.listen(config.get('app_port'), '0.0.0.0', () => {
-    logger.success(`Running on http://${getLocalIp()}:${config.get('app_port')}`);
+const bindAddress = config.has('bind_address') ? config.get<string>('bind_address') : '0.0.0.0';
+
+server.listen(config.get('app_port'), bindAddress, () => {
+    const port = config.get('app_port');
+    logger.success(`Running on http://${getLocalIp()}:${port} (bound to ${bindAddress}:${port})`);
 });
