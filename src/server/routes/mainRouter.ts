@@ -106,12 +106,12 @@ router.get('/workflow/:type/:identifier', (req: RequestWithTheme, res) => {
     loadAndRenderWorkflow(workflowType, workflowIdentifier, req, res, 'pages/workflow');
 });
 
-router.get('/gallery/:subfolder?', (req: RequestWithTheme, res) => {
+router.get('/gallery/:subfolder?', async (req: RequestWithTheme, res) => {
     const page = Number(req.query.page) || 0;
     const subfolder = req.params.subfolder || '';
     const itemsPerPage = Number(req.cookies['galleryItemsPerPage']) || 20;
 
-    const pageData = getGalleryPageData(page, subfolder, itemsPerPage);
+    const pageData = await getGalleryPageData(page, subfolder, itemsPerPage);
 
     res.render('pages/gallery', { theme: req.theme, ...pageData });
 });

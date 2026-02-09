@@ -2,6 +2,8 @@ import path from 'path';
 import fs from 'fs';
 import config from 'config';
 import { safeJoin } from './safePath';
+import { comfyUIAxios } from './comfyAPIUtils/comfyUIAxios';
+import { getRequiredAccessToken } from '../middleware/authMiddleware';
 
 function getRelativeTimeText(timestamp: number): string {
     const now = Date.now();
@@ -62,7 +64,7 @@ function getRelativeTimeText(timestamp: number): string {
  * @param {number} itemsPerPage - Images sent per page.
  * @returns {GalleryPageData} - Object containing paginated images and additional page info.
  */
-function getGalleryPageData(page = 0, subfolder = '', itemsPerPage = 20) {
+function getGalleryPageDataFromFs(page = 0, subfolder = '', itemsPerPage = 20) {
     const imageOutputPath = config.get('output_dir');
 
     if (!imageOutputPath || !(typeof imageOutputPath === 'string')) {
@@ -147,6 +149,80 @@ function getGalleryPageData(page = 0, subfolder = '', itemsPerPage = 20) {
         pageInfo: { prevPage: prevPage, currentPage: page, nextPage: nextPage, totalPages: totalPages },
         error: null,
     };
+}
+
+async function getGalleryPageDataFromMiniBridge(page = 0, subfolder = '', itemsPerPage = 20) {
+    const qs = new URLSearchParams({ limit: '200' });
+    if (subfolder && subfolder.trim() !== '') {
+        qs.set('subfolder', subfolder);
+    }
+
+    const token = getRequiredAccessToken();
+    const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+
+    try {
+        const resp = await comfyUIAxios.get(`/minibridge/outputs?${qs.toString()}`, { headers });
+        const payload = resp?.data as
+            | {
+                  ok: true;
+                  items: Array<{ filename: string; subfolder: string; mtime: number; kind: string }>;
+                  subfolders?: string[];
+              }
+            | { ok: false; error?: string };
+
+        if (!payload || !('ok' in payload) || payload.ok !== true) {
+            return {
+                error: 'MiniBridge returned an error.',
+                scanned: { subfolders: [], images: [] },
+                pageInfo: { prevPage: 0, currentPage: 0, nextPage: 0, totalPages: 0 },
+            };
+        }
+
+        const images = (payload.items || [])
+            .filter((it) => it.kind === 'image')
+            .map((it) => {
+                const mtimeMs = Number(it.mtime) * 1000;
+                const qs = new URLSearchParams({ filename: it.filename, subfolder: it.subfolder || '', type: 'output' });
+                return {
+                    path: `/comfyui/image?${qs.toString()}`,
+                    time: mtimeMs,
+                    timeText: getRelativeTimeText(mtimeMs),
+                };
+            })
+            .sort((a, b) => b.time - a.time);
+
+        const startIndex = page * itemsPerPage;
+        const endIndex = startIndex + itemsPerPage;
+        const paginatedFiles = images.slice(startIndex, endIndex);
+
+        const totalPages = Math.max(0, Math.ceil(images.length / itemsPerPage) - 1);
+        const prevPage = page - 1 >= 0 ? page - 1 : 0;
+        const nextPage = page + 1 <= totalPages ? page + 1 : totalPages;
+
+        return {
+            scanned: { subfolders: payload.subfolders || [], images: paginatedFiles },
+            pageInfo: { prevPage: prevPage, currentPage: page, nextPage: nextPage, totalPages: totalPages },
+            error: null,
+        };
+    } catch (err) {
+        return {
+            error: 'MiniBridge is unavailable. Ensure ComfyUI-MiniBridge is installed in ComfyUI.',
+            scanned: { subfolders: [], images: [] },
+            pageInfo: { prevPage: 0, currentPage: 0, nextPage: 0, totalPages: 0 },
+        };
+    }
+}
+
+async function getGalleryPageData(page = 0, subfolder = '', itemsPerPage = 20) {
+    const imageOutputPath = config.get('output_dir');
+
+    // Prefer filesystem listing when available (best UX + unlimited paging).
+    if (typeof imageOutputPath === 'string' && imageOutputPath.trim() !== '' && fs.existsSync(imageOutputPath)) {
+        return getGalleryPageDataFromFs(page, subfolder, itemsPerPage);
+    }
+
+    // Fallback for remote ComfyUI instances: list outputs via /minibridge/outputs.
+    return await getGalleryPageDataFromMiniBridge(page, subfolder, itemsPerPage);
 }
 
 export { getGalleryPageData };
