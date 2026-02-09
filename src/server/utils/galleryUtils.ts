@@ -3,7 +3,19 @@ import fs from 'fs';
 import config from 'config';
 import { safeJoin } from './safePath';
 import { comfyUIAxios } from './comfyAPIUtils/comfyUIAxios';
-import { getRequiredAccessToken } from '../middleware/authMiddleware';
+
+function getMiniBridgeToken(): string | null {
+    if (!config.has('minibridge_token')) {
+        return null;
+    }
+
+    const token = config.get<string>('minibridge_token');
+    if (!token || typeof token !== 'string' || token.trim() === '') {
+        return null;
+    }
+
+    return token.trim();
+}
 
 function getRelativeTimeText(timestamp: number): string {
     const now = Date.now();
@@ -157,7 +169,7 @@ async function getGalleryPageDataFromMiniBridge(page = 0, subfolder = '', itemsP
         qs.set('subfolder', subfolder);
     }
 
-    const token = getRequiredAccessToken();
+    const token = getMiniBridgeToken();
     const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
 
     try {
